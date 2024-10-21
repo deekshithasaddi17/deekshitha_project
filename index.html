@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speech Interface</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #000000, #4B0082);
+            color: #FFF;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .header {
+            text-align: center;
+            position: relative;
+            padding: 20px 0;
+        }
+        h1, h2 {
+            color: #FFF;
+            text-shadow: 2px 2px 4px rgba(75, 0, 130, 0.5);
+        }
+        textarea, input[type="file"] {
+            width: 100%;
+            margin-top: 10px;
+            padding: 10px;
+            border: 2px solid #8A2BE2;
+            border-radius: 4px;
+            background-color: rgba(255, 255, 255, 0.1);
+            color: #FFF;
+        }
+        button {
+            margin-top: 10px;
+            padding: 10px 20px;
+            background-color: #8A2BE2;
+            color: #FFF;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.1s;
+        }
+        button:hover {
+            background-color: #9B30FF;
+            transform: scale(1.05);
+        }
+        #transcription, #feedback, #sentiment, #file-path {
+            background-color: rgba(255, 255, 255, 0.1);
+            border: 2px solid #8A2BE2;
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 10px;
+        }
+        .section {
+            margin-bottom: 30px;
+        }
+        a {
+            color: #FFA500;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Speech Interface</h1>
+    </div>
+
+    <div class="section">
+        <h2>Text to Speech</h2>
+        <textarea id="text-input" rows="4" placeholder="Type your thoughts here..."></textarea>
+        <button onclick="textToSpeech()">Speak Your Thoughts</button>
+        <p id="tts-file-path"></p>
+        <p id="tts-sentiment"></p>
+        <audio id="tts-audio" controls style="display: none;"></audio>
+    </div>
+
+    <div class="section">
+        <h2>Speech to Text</h2>
+        <button id="start-recognition">Start Speech Recognition</button>
+        <p id="transcription"></p>
+        <p id="sentiment"></p>
+        <p id="file-path"></p>
+    </div>
+
+    <p id="feedback" style="font-style: italic; text-align: center;"></p>
+    
+    <script>
+        function textToSpeech() {
+            const text = document.getElementById('text-input').value;
+            fetch('/text-to-speech', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({text: text}),
+            })
+            .then(response => response.json())
+            .then(data => {
+                const audio = document.getElementById('tts-audio');
+                audio.src = data.audio_path;
+                audio.style.display = 'block';
+                document.getElementById('tts-file-path').innerHTML = `Text file: <a href="${data.text_path}" target="_blank">${data.text_path}</a><br>Audio file: <a href="${data.audio_path}" target="_blank">${data.audio_path}</a>`;
+                document.getElementById('tts-sentiment').textContent = `Sentiment: ${data.sentiment}`;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred during text-to-speech conversion.');
+            });
+        }
+
+        const recognition = 'webkitSpeechRecognition' in window ? new webkitSpeechRecognition() : new SpeechRecognition();
+        recognition.lang = 'en-US';
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+
+        recognition.onresult = function(event) {
+            const transcript = event.results[0][0].transcript;
+            fetch('/transcribe', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({transcription: transcript}),
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('transcription').textContent = data.transcription;
+                document.getElementById('sentiment').textContent = `Sentiment: ${data.sentiment}`;
+                document.getElementById('file-path').innerHTML = `File: <a href="${data.file_path}" target="_blank">${data.file_path}</a>`;
+                document.getElementById('feedback').textContent = data.feedback;
+                document.getElementById('start-recognition').textContent = 'Start Speech Recognition';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred during transcription.');
+            });
+        };
+
+        recognition.onerror = function(event) {
+            console.error('Speech recognition error:', event.error);
+            document.getElementById('start-recognition').textContent = 'Start Speech Recognition';
+            alert('Error occurred in speech recognition: ' + event.error);
+        };
+
+        document.getElementById('start-recognition').addEventListener('click', function() {
+            recognition.start();
+            this.textContent = 'Listening...';
+            document.getElementById('transcription').textContent = '';
+            document.getElementById('sentiment').textContent = '';
+            document.getElementById('file-path').textContent = '';
+        });
+
+        recognition.onend = function() {
+            document.getElementById('start-recognition').textContent = 'Start Speech Recognition';
+        };
+    </script>
+</body>
+</html>
